@@ -1,3 +1,9 @@
+## Environment
+* Linux Kernel 4.4.x
+* MPTCP v0.92.x
+
+<br>
+
 ## MPTCP Socket API test app
 This is echo program between server and client.<br>
 To run this, the Linux kernel must first have MPTCP built into it.<br>
