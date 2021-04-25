@@ -1,9 +1,3 @@
-## Environment
-* Linux Kernel 4.4.x
-* MPTCP v0.92.x
-
-<br>
-
 ## MPTCP Socket API test app
 This is echo program between server and client.<br>
 To run this, the Linux kernel must first have MPTCP built into it.<br>
@@ -13,6 +7,12 @@ And I used `tcpdump` for packet capture.
 * ref 1) : www.multipath-tcp.org
 * ref 2) : https://tools.ietf.org/pdf/draft-hesmans-mptcp-socket-03.pdf
 * ref 3) : https://irtf.org/anrw/2016/anrw16-final16.pdf
+
+<br>
+
+## Environment
+* Linux Kernel 4.4.x
+* MPTCP v0.92.x
 
 <br>
 
