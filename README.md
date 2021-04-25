@@ -11,8 +11,8 @@ And I used `tcpdump` for packet capture.
 <br>
 
 ## Environment
-* >= Linux Kernel 4.4.x
-* >= MPTCP v0.92.x
+* &geq; Linux Kernel 4.4.x
+* &geq; MPTCP v0.92.x
 
 <br>
 
