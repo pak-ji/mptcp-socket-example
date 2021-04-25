@@ -1,7 +1,8 @@
 ## MPTCP Socket API test app
 This is echo program between server and client.<br>
 To run this, the Linux kernel must first have MPTCP built into it.<br>
-Refer to ref 1) below to build MPTCP in the Linux kernel.
+Refer to ref 1) below to build MPTCP in the Linux kernel.<br>
+And I used `tcpdump` for packet capture.
 
 * ref 1) : www.multipath-tcp.org
 * ref 2) : https://tools.ietf.org/pdf/draft-hesmans-mptcp-socket-03.pdf
