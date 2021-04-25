@@ -15,8 +15,6 @@
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 
-#define PORT 9999
-
 
 /**
  * 기존의 TCP Server는 { socket() -> bind() -> listen() -> accept() -> recv(), send() -> close() }순서로 흘러간다.
