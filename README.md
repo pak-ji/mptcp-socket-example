@@ -5,8 +5,7 @@ Refer to ref 1) below to build MPTCP in the Linux kernel.<br>
 And I used `tcpdump` for packet capture.
 
 * ref 1) : www.multipath-tcp.org
-* ref 2) : https://tools.ietf.org/pdf/draft-hesmans-mptcp-socket-03.pdf
-* ref 3) : https://irtf.org/anrw/2016/anrw16-final16.pdf
+* ref 2) : https://irtf.org/anrw/2016/anrw16-final16.pdf
 
 <br>
 
