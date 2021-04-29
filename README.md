@@ -1,5 +1,5 @@
 ## MPTCP Socket API test app
-This is echo program between server and client.<br>
+This is echo and file send program between server and client.<br>
 To run this, the Linux kernel must first have MPTCP built into it.<br>
 Refer to ref 1) below to build MPTCP in the Linux kernel.<br>
 And I used `tcpdump` for packet capture.
@@ -25,10 +25,12 @@ And I used `tcpdump` for packet capture.
 <br>
 
 ## How to run?
-##### in server
+##### in server (do first)
 	./server [port number]
-##### in client
+##### in client (echo)
 	./client [server address] [port number]
+##### in client (file)
+	./client [server address] [port number] [file path]
 
 <br>
 
