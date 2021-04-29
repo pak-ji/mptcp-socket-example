@@ -41,6 +41,5 @@ Make sure you send it to physical address.
 <br>
 
 ## Testing Video
-<iframe width="640" height="360" src="https://www.youtube.com/embed/6Az2cNU7gUw" frameborder="0" gesture="media" allowfullscreen=""></iframe>
 [![file send test - 1](README_contents/1.png)](README_contents/file_send_video_1.mp4)
 [![file send test - 2](README_contents/2.png)](README_contents/file_send_video_2.mp4)
