@@ -41,5 +41,5 @@ Make sure you send it to physical address.
 <br>
 
 ## Testing Video
-[file send test video - 1](README_contents/file_send_video_1.mp4)
-[file send test video - 1](README_contents/file_send_video_2.mp4)
+* [Large size file transfer video for test - 1](README_contents/file_send_video_1.mp4)
+* [Large size file transfer video for test - 2](README_contents/file_send_video_2.mp4)
