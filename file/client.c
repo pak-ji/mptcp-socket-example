@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 	while(nsize!=fsize){
 		int fpsize = fread(send_buff, 1, 1024, file);
 		nsize += fpsize;
-		printf("[client] file size %dB | send to %dB [%d%%]\n", fsize, nsize, nsize*100/fsize);
+		printf("[client] file size %dB | send to %dB\n", fsize, nsize);
 		send(sock, send_buff, fpsize, 0);
 	}
 	
