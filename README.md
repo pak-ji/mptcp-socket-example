@@ -37,3 +37,9 @@ And I used `tcpdump` for packet capture.
 ## Precautions for Testing
 It does not work as an MPTCP stack when proceeding to the loopback address("localhost", "127.0.0.1"). <br>
 Make sure you send it to physical address.
+
+<br>
+
+## Testing Video
+[![file send test - 1]()](README_contents/file_send_video_1.mp4)
+[![file send test - 2]()](README_contents/file_send_video_2.mp4)
