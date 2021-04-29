@@ -37,6 +37,7 @@ int main(int argc, char** argv)
 	int fsize = 0, nsize = 0;
 
 	int enable = 1;
+	char* path_manager = "fullmesh";
 
 	if(argc != 4){
 		fprintf(stderr, "usage: %s [host_address] [port_number] [file_path]\n", argv[0]);
@@ -53,11 +54,17 @@ int main(int argc, char** argv)
 	}
 
 	/* setsockopt()함수와 MPTCP_ENABLED(=42)상수를 사용하여 MPTCP Socket으로 Setup */
-	setsockopt(sock, SOL_TCP, 42 /* MPTCP_ENABLED */, &enable, sizeof(int));
+	ret = setsockopt(sock, SOL_TCP, 42 /* MPTCP_ENABLED */, &enable, sizeof(int));
 	if(ret < 0){
-		perror("[server] setsockopt() ");
+		perror("[server] setsockopt(MPTCP_ENABLED) ");
 		return -1;
 	}
+
+	//ret = setsockopt(sock, SOL_TCP, 44 /* MPTCP_PATH_MANAGER */, path_manager, strlen(path_manager)+1);
+	//if(ret < 0){
+	//	perror("[server] setsockopt(MPTCP_PATH_MANAGER) ");
+	//	return -1;
+	//}
 
 	memset(&addr, 0x00, sizeof(addr));
 	addr.sin_family = AF_INET;
