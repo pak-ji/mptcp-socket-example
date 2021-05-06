@@ -24,7 +24,7 @@ And I used `tcpdump` for packet capture.
 <br>
 
 ## How to run?
-##### in server (do first)
+##### in server (do first, echo & file)
 	./server [port number]
 ##### in client (echo)
 	./client [server address] [port number]
