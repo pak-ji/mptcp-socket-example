@@ -33,7 +33,7 @@ int main(int argc, char** argv)
 	int enable = 1;
 
 	if(argc != 3){
-		fprintf(stderr, "usage: %s [host_address] [port_number]\n", argv[0])
+		fprintf(stderr, "usage: %s [host_address] [port_number]\n", argv[0]);
 		return -1;
 	}
 	ADDR = argv[1];
