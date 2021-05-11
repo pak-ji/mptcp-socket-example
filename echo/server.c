@@ -20,7 +20,7 @@
  * 기존의 TCP Server는 { socket() -> bind() -> listen() -> accept() -> recv(), send() -> close() }순서로 흘러간다.
  * 여기서 TCP Socket을 MPTCP Socket으로 설정하기 위해서는 socket()과 bind()사이에 setsockopt()을 사용한다.
  **/
-int main()
+int main(int argc, char** argv)
 {
 	int PORT;
 
@@ -32,7 +32,7 @@ int main()
 	int enable = 1;
 
 	if(argc != 2){
-		fprintf(stderr, "usage: %s [port_number]\n", argv[0])
+		fprintf(stderr, "usage: %s [port_number]\n", argv[0]);
 		return -1;
 	}
 	PORT = atoi(argv[1]);
