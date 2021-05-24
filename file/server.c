@@ -16,6 +16,8 @@
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 
+#include "../header/mptcp.h"
+
 
 /**
  * 기존의 TCP Server는 { socket() -> bind() -> listen() -> accept() -> recv(), send() -> close() }순서로 흘러간다.
@@ -49,7 +51,7 @@ int main(int argc, char** argv)
 	}
 
 	/* setsockopt()함수와 MPTCP_ENABLED(=42)상수를 사용하여 MPTCP Socket으로 Setup */
-	ret = setsockopt(server_sock, SOL_TCP, 42 /*MPTCP_ENABLED*/, &enable, sizeof(int));
+	ret = setsockopt(server_sock, SOL_TCP, MPTCP_ENABLED, &enable, sizeof(int));
 	if(ret < 0){
 		perror("[server] setsockopt() ");
 		return -1;

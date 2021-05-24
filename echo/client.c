@@ -16,6 +16,8 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
+#include "../header/mptcp.h"
+
 /**
  * 기존의 TCP Client는 { socket() -> connect() -> recv(), send() -> close() }순서로 흘러간다.
  * 여기서 TCP Socket을 MPTCP Socket으로 설정하기 위해서는 socket()과 connect()사이에 setsockopt()을 사용한다.
@@ -47,7 +49,7 @@ int main(int argc, char** argv)
 	}
 
 	/* setsockopt()함수와 MPTCP_ENABLED(=42)상수를 사용하여 MPTCP Socket으로 Setup */
-	setsockopt(sock, SOL_TCP, 42 /* MPTCP_ENABLED */, &enable, sizeof(int));
+	setsockopt(sock, SOL_TCP, MPTCP_ENABLED, &enable, sizeof(int));
 	if(ret < 0){
 		perror("[server] setsockopt() ");
 		return -1;
