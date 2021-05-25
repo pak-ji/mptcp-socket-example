@@ -29,7 +29,7 @@ And I used `ifstat` for NIC statistics.
 	./server [port number]
 ##### in client (echo)
 	./client [server address] [port number]
-##### in client (file)
+##### in client (file & p_scheduler)
 	./client [server address] [port number] [file path]
 
 <br>
