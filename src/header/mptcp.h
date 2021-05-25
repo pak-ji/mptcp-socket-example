@@ -2,7 +2,7 @@
  * MPTCP Option Header File
  *
  * @date	: 2021-05-25(Thu)
- * @author	: Ji-Hun Park(INSALB)
+ * @author	: Ji-Hun(INSALB)
  */
 
 
