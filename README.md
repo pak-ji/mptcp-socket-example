@@ -25,7 +25,7 @@ And I used `ifstat` for NIC statistics.
 <br>
 
 ## How to run?
-##### in server (do first, echo & file)
+##### in server (do first, echo & file & p_scheduler)
 	./server [port number]
 ##### in client (echo)
 	./client [server address] [port number]
