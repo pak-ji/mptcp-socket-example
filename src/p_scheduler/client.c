@@ -43,8 +43,6 @@ int main(int argc, char** argv)
 	int scheduler_num;
 	char* scheduler;
 
-	/* 각 패킷 스케줄러를 번호로 기입할 수 있도록 하나의 테이블을 프린트 */
-	/* 결정된 번호는 파일의 인자로 작성될 수 있도록 유도하기 */
 	if(argc != 4){
 		fprintf(stderr, "usage: %s [host_address] [port_number] [file_path]\n", argv[0]);
 		return -1;
