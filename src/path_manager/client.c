@@ -40,6 +40,8 @@ int main(int argc, char** argv)
 
 	int enable = 1;
 
+	char* scheduler = "roundrobin";
+
 	int manager_num;
 	char* manager;
 
@@ -102,6 +104,12 @@ int main(int argc, char** argv)
 	ret = setsockopt(sock, SOL_TCP, MPTCP_PATH_MANAGER, manager, strlen(manager));
 	if(ret < 0){
 		perror("[server] setsockopt(MPTCP_PATH_MANAGER) ");
+		return -1;
+	}
+
+	ret = setsockopt(sock, SOL_TCP, MPTCP_SCHEDULER, scheduler, strlen(scheduler));
+	if(ret < 0){
+		perror("[server] setsockopt(MPTCP_SCHEDULER) ");
 		return -1;
 	}
 
