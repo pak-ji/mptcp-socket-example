@@ -49,9 +49,9 @@ int main(int argc, char** argv)
 	}
 
 	/* setsockopt()함수와 MPTCP_ENABLED(=42)상수를 사용하여 MPTCP Socket으로 Setup */
-	setsockopt(sock, SOL_TCP, MPTCP_ENABLED, &enable, sizeof(int));
+	ret = setsockopt(sock, SOL_TCP, MPTCP_ENABLED, &enable, sizeof(int));
 	if(ret < 0){
-		perror("[server] setsockopt() ");
+		perror("[client] setsockopt() ");
 		return -1;
 	}
 
