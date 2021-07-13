@@ -100,7 +100,7 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	/* setsockopt()함수와 MPTCP_SCHEDULER(=44)상수를 사용하여 MPTCP의 Path Manager 변경 */
+	/* setsockopt()함수와 MPTCP_PATH_MANAGER(=44)상수를 사용하여 MPTCP의 Path Manager 변경 */
 	ret = setsockopt(sock, SOL_TCP, MPTCP_PATH_MANAGER, manager, strlen(manager));
 	if(ret < 0){
 		perror("[server] setsockopt(MPTCP_PATH_MANAGER) ");
