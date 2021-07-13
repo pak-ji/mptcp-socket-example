@@ -1,5 +1,3 @@
-test
-
 ## MPTCP Socket API test app
 This is echo and file send program between server and client.<br>
 To run this, the Linux kernel must first have MPTCP built into it.<br>
