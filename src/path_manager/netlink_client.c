@@ -20,11 +20,13 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 #include <linux/genetlink.h>
 
 #include "../header/mptcp.h"
 #include "../header/mptcp_netlink_api.h"
+#include "./token.h"
 
 
 /* generic netlik 매크로 */
@@ -190,10 +192,16 @@ int main(int argc, char** argv)
 	struct gennl_ins_msg request;
 	struct nlattr* nla;
 
-	uint32_t token;
-	uint8_t loc_id;
-	uint16_t family;
-	uint32_t saddr4;
+	uint32_t token = get_token(1); // get local token
+	uint8_t loc_id = 0x01;
+	uint16_t family = AF_INET;
+	//uint32_t saddr4 = 0xC0A8010A; // 192.168.1.10
+	uint32_t saddr4 = 0x0A01A8C0; // 192.168.1.10
+
+	printf("token : %X\n", token);
+	printf("loc_id : %d\n", loc_id);
+	printf("family : %d\n", family);
+	printf("saddr : %X\n", saddr4);
 	
 	unsigned int gennl_payload_size = 
 		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint32_t))) + // loc_token
@@ -254,13 +262,9 @@ int main(int argc, char** argv)
 			0, (struct sockaddr*)&nl_addr, sizeof(nl_addr));
 	if(ret != request.nh.nlmsg_len) {
 		perror("sendto(NETLINK_GENERIC) : ");
+		fprintf(stderr, "sendto(NETLINK_GENERIC) errno : %d\n", errno);
 		return -1;
 	}
-
-	// recv() 를 받나? 받으면 무얼받지? 만약 받으면 char*로 받아서 하나하나 찍어보기
-
-
-
 
 	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
 	while(nsize!=fsize){

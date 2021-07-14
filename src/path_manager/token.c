@@ -6,7 +6,7 @@
 
 #include "token.h"
 
-uint32_t get_token(int loc_rem);
+uint32_t get_token(int loc_rem)
 {
 	FILE *fp = NULL;
 	char line[1024];
@@ -55,7 +55,7 @@ uint32_t get_token(int loc_rem);
 	//printf("rem tkn : %X\n", rem_tkn);
 	
 	if(loc_rem == 1)
-		return loc_tkn;
+		return l_token;
 	else
-		return rem_tkn;
+		return r_token;
 }
