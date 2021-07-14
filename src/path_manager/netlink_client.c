@@ -23,8 +23,8 @@
 
 #include <linux/genetlink.h>
 
-#include "mptcp.h"
-#include "genl_header.h"
+#include "../header/mptcp.h"
+#include "../header/mptcp_netlink_api.h"
 
 
 /* generic netlik 매크로 */
@@ -54,7 +54,7 @@ struct gennl_ins_msg {
 /* generic netlik 전역 함수 */
 static struct nl_sock instance = { 	
 	.fd = -1,
-	.name = GENL_INSTANCE_NAME 
+	.name = MPTCP_GENL_NAME 
 };
 
 
@@ -92,8 +92,8 @@ int main(int argc, char** argv)
 	int manager_num;
 	char* manager;
 
-	if(argc != 3){
-		fprintf(stderr, "usage: %s [host_address] [port_number]\n", argv[0]);
+	if(argc != 4){
+		fprintf(stderr, "usage: %s [host_address] [port_number] [file_path]\n", argv[0]);
 		return -1;
 	}
 	ADDR = argv[1];
@@ -189,20 +189,20 @@ int main(int argc, char** argv)
 	 **/
 	struct gennl_ins_msg request;
 	struct nlattr* nla;
-	
-	/** signal ADD_ADDR
+
+	uint32_t token;
+	uint8_t loc_id;
+	uint16_t family;
+	uint32_t saddr4;
 	
 	unsigned int gennl_payload_size = 
-		(NLA_HDRLEN + NLA_ALIGN(ATTR_TOKEN = u32)) +
-		(NLA_HDRLEN + NLA_ALIGN(ATTR_LOC_ID = u8)) +
-		(NLA_HDRLEN + NLA_ALIGN(ATTR_FAMILY = u16)) +
-		(NLA_HDRLEN + NLA_ALIGN(ATTR_SADDR4 = u32));
-		// + (NLA_HDRLEN + NLA_ALIGN(ATTR_SPORT = u16)); // option
-	*/
+		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint32_t))) + // loc_token
+		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint8_t)))  + // loc_id
+		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint16_t))) + // family
+		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint32_t)));  // saddr v4
 
-	/*
 	request.nh.nlmsg_len = NLMSG_HDRLEN + GENL_HDRLEN;
-	request.nh.nlmsg_type = instance->family_id;
+	request.nh.nlmsg_type = instance.family_id;
 	request.nh.nlmsg_flags = NLM_F_REQUEST;
 	request.nh.nlmsg_pid = getpid();
 
@@ -212,42 +212,45 @@ int main(int argc, char** argv)
 	request.payload = (char*)malloc(gennl_payload_size);
 
 	// Set token to nlattr
-	nla = request.payload;
-	nla->nla_len = NLA_HDRLEN + sizeof(ATTR_TOKEN);
-	nla->nla_type = ATTR_TOKEN;
-	memcpy(nla + NLA_HDRLEN, &token, sizeof(token);
-	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_TOKEN));
+	nla = (struct nlattr*)request.payload;
+	nla->nla_len = NLA_HDRLEN + sizeof(MPTCP_ATTR_TOKEN);
+	nla->nla_type = MPTCP_ATTR_TOKEN;
+	memcpy(nla + NLA_HDRLEN, &token, sizeof(token));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(token));
 
 	// Set loc_id to nlattr
-	nla = request.payload + NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_TOKEN));
-	nla->nla_len = NLA_HDRLEN + sizeof(ATTR_LOC_ID);
-	nla->nla_type = ATTR_LOC_ID;
+	nla = (struct nlattr*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token)));
+	nla->nla_len = NLA_HDRLEN + sizeof(loc_id);
+	nla->nla_type = MPTCP_ATTR_LOC_ID;
 	memcpy(nla + NLA_HDRLEN, &loc_id, sizeof(loc_id));
-	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_LOC_ID));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id));
 
 	// Set family to nlattr
-	nla = request.payload + NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_TOKEN))
-				+ NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_LOC_ID));
-	nla->nla_len = NLA_HDRLEN + sizeof(ATTR_FAMILY);
-	nla->nla_type = ATTR_FAMILY;
+	nla = (struct nlattr*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id)));
+	nla->nla_len = NLA_HDRLEN + sizeof(family);
+	nla->nla_type = MPTCP_ATTR_FAMILY;
 	memcpy(nla + NLA_HDRLEN, &family, sizeof(family));
-	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_FAMILY));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(family));
 
 	// Set v4_source_addr(ip) to nlattr
-	nla = request.payload + NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_TOKEN))
-				+ NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_LOC_ID))
-				+ NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_FAMILY));
-	nla->nla_len = NLA_HDRLEN + sizeof(ATTR_SADDR4);
-	nla->nla_type = ATTR_SADDR4;
+	nla = (struct nlattr*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family)));
+	nla->nla_len = NLA_HDRLEN + sizeof(saddr4);
+	nla->nla_type = MPTCP_ATTR_SADDR4;
 	memcpy(nla + NLA_HDRLEN, &saddr4, sizeof(saddr4));
-	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(ATTR_SADDR4));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(saddr4));
 
 	// Send to request
 	struct sockaddr_nl nl_addr;
 	memset(&nl_addr, 0, sizeof(nl_addr));
 	nl_addr.nl_family = AF_NETLINK;
 
-	ret = sendto(nl_sock->fd, (char*)&request, request.nh.nlmsg_len,
+	ret = sendto(instance.fd, (char*)&request, request.nh.nlmsg_len,
 			0, (struct sockaddr*)&nl_addr, sizeof(nl_addr));
 	if(ret != request.nh.nlmsg_len) {
 		perror("sendto(NETLINK_GENERIC) : ");
@@ -256,19 +259,16 @@ int main(int argc, char** argv)
 
 	// recv() 를 받나? 받으면 무얼받지? 만약 받으면 char*로 받아서 하나하나 찍어보기
 
-	*/
 
 
 
-	/* file send code
+	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
 	while(nsize!=fsize){
 		int fpsize = fread(send_buff, 1, 1024, file);
 		nsize += fpsize;
 
-		printf("[client] file sending...(%s) %dB | send to %dB\n", FILE_PATH, fsize, nsize);
-		send(sock, send_buff, fpsize, 0);
+		//send(sock, send_buff, fpsize, 0);
 	}
-	*/
 	
 	fclose(file);
 	close(sock);
@@ -321,18 +321,12 @@ int lookup_gennl_family_id(struct nl_sock *nl_sock)
 	request.gh.cmd = CTRL_CMD_GETFAMILY;
 	request.gh.version = 0x1;
 
-	/** 
-	 * FIXME 
-	 *
-	 * request의 payload가 포인터 변수로 되어있음 이것을 malloc 해주어야 strcpy 에러가 나지않
-	 *
-	 * FIXME
-	 **/
+	request.payload = (char*)malloc(256);
 
-	nl_na = (struct nlattr*)GENLMSG_DATA(&request);
+	nl_na = (struct nlattr*)request.payload;
 	nl_na->nla_type = CTRL_ATTR_FAMILY_NAME;
-	nl_na->nla_len = strlen(GENL_INSTANCE_NAME) + 1 + NLA_HDRLEN;
-	strcpy(NLA_DATA(nl_na), GENL_INSTANCE_NAME);
+	nl_na->nla_len = strlen(MPTCP_GENL_NAME) + 1 + NLA_HDRLEN;
+	strcpy(NLA_DATA(nl_na), MPTCP_GENL_NAME);
 
 	request.nh.nlmsg_len += NLMSG_ALIGN(nl_na->nla_len);
 
