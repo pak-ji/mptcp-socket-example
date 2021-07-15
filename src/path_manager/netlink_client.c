@@ -50,7 +50,7 @@ struct nl_sock {
 struct gennl_ins_msg {
 	struct nlmsghdr nh;
 	struct genlmsghdr gh;
-	char* payload;
+	char payload[1024];
 };
 
 /* generic netlik 전역 함수 */
@@ -180,6 +180,10 @@ int main(int argc, char** argv)
 	if(ret < 0) return -1;
 	instance.family_id = lookup_gennl_family_id(&instance);
 
+
+
+
+
 	/**
 	 * MPTCP Signal 전송하기(using Genlink API)
 	 *
@@ -192,22 +196,18 @@ int main(int argc, char** argv)
 	struct gennl_ins_msg request;
 	struct nlattr* nla;
 
-	uint32_t token = get_token(1); // get local token
-	uint8_t loc_id = 0x01;
-	uint16_t family = AF_INET;
-	//uint32_t saddr4 = 0xC0A8010A; // 192.168.1.10
-	uint32_t saddr4 = 0x0A01A8C0; // 192.168.1.10
+	memset(&request, 0, sizeof(request));
 
-	printf("token : %X\n", token);
-	printf("loc_id : %d\n", loc_id);
-	printf("family : %d\n", family);
-	printf("saddr : %X\n", saddr4);
-	
-	unsigned int gennl_payload_size = 
-		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint32_t))) + // loc_token
-		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint8_t)))  + // loc_id
-		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint16_t))) + // family
-		(NLA_HDRLEN + NLA_ALIGN(sizeof(uint32_t)));  // saddr v4
+
+
+
+
+	/* 1 : add_addr code start */
+
+	uint32_t token = get_token(1); // get local token
+	uint8_t loc_id = 1;
+	uint16_t family = AF_INET;
+	uint32_t saddr4 = inet_addr("192.168.1.10");
 
 	request.nh.nlmsg_len = NLMSG_HDRLEN + GENL_HDRLEN;
 	request.nh.nlmsg_type = instance.family_id;
@@ -215,42 +215,40 @@ int main(int argc, char** argv)
 	request.nh.nlmsg_pid = getpid();
 
 	request.gh.cmd = MPTCP_CMD_ANNOUNCE;
-	request.gh.version = 0x1;
-
-	request.payload = (char*)malloc(gennl_payload_size);
+	request.gh.version = MPTCP_GENL_VER;
 
 	// Set token to nlattr
 	nla = (struct nlattr*)request.payload;
-	nla->nla_len = NLA_HDRLEN + sizeof(MPTCP_ATTR_TOKEN);
+	nla->nla_len = NLA_HDRLEN + sizeof(token);
 	nla->nla_type = MPTCP_ATTR_TOKEN;
-	memcpy(nla + NLA_HDRLEN, &token, sizeof(token));
+	memcpy((char*)nla + NLA_HDRLEN, &token, sizeof(token));
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(token));
 
 	// Set loc_id to nlattr
-	nla = (struct nlattr*)request.payload 
-				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token)));
+	nla = (struct nlattr*)((char*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token))));
 	nla->nla_len = NLA_HDRLEN + sizeof(loc_id);
 	nla->nla_type = MPTCP_ATTR_LOC_ID;
-	memcpy(nla + NLA_HDRLEN, &loc_id, sizeof(loc_id));
+	memcpy((char*)nla + NLA_HDRLEN, &loc_id, sizeof(loc_id));
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id));
 
 	// Set family to nlattr
-	nla = (struct nlattr*)request.payload 
+	nla = (struct nlattr*)((char*)request.payload 
 				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token)))
-				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id)));
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id))));
 	nla->nla_len = NLA_HDRLEN + sizeof(family);
 	nla->nla_type = MPTCP_ATTR_FAMILY;
-	memcpy(nla + NLA_HDRLEN, &family, sizeof(family));
+	memcpy((char*)nla + NLA_HDRLEN, &family, sizeof(family));
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(family));
 
 	// Set v4_source_addr(ip) to nlattr
-	nla = (struct nlattr*)request.payload 
+	nla = (struct nlattr*)((char*)request.payload 
 				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token)))
 				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id)))
-				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family)));
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family))));
 	nla->nla_len = NLA_HDRLEN + sizeof(saddr4);
 	nla->nla_type = MPTCP_ATTR_SADDR4;
-	memcpy(nla + NLA_HDRLEN, &saddr4, sizeof(saddr4));
+	memcpy((char*)nla + NLA_HDRLEN, &saddr4, sizeof(saddr4));
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(saddr4));
 
 	// Send to request
@@ -266,13 +264,124 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
+	/* 1 : add_addr code end */
+
+
+
+
+
+
+	/* 2 : create_subflow code start */
+
+	memset(&request, 0, sizeof(request));
+
+	uint32_t token_ = get_token(0); // get local token
+	uint16_t family_ = AF_INET;
+	uint8_t loc_id_ = 1;
+	uint8_t rem_id_ = 0;
+	uint32_t daddr4_ = inet_addr(ADDR);
+	uint16_t dport_ = ntohs(PORT);
+
+	request.nh.nlmsg_len = NLMSG_HDRLEN + GENL_HDRLEN;
+	request.nh.nlmsg_type = instance.family_id;
+	request.nh.nlmsg_flags = NLM_F_REQUEST;
+	request.nh.nlmsg_pid = getpid();
+
+	request.gh.cmd = MPTCP_CMD_SUB_CREATE;
+	request.gh.version = MPTCP_GENL_VER;
+
+	// Set token to nlattr
+	nla = (struct nlattr*)request.payload;
+	nla->nla_len = NLA_HDRLEN + sizeof(token_);
+	nla->nla_type = MPTCP_ATTR_TOKEN;
+	memcpy((char*)nla + NLA_HDRLEN, &token_, sizeof(token_));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(token_));
+
+	// Set family to nlattr
+	nla = (struct nlattr*)((char*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token_))));
+	nla->nla_len = NLA_HDRLEN + sizeof(family_);
+	nla->nla_type = MPTCP_ATTR_FAMILY;
+	memcpy((char*)nla + NLA_HDRLEN, &family_, sizeof(family_));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(family_));
+
+	// Set loc_id to nlattr
+	nla = (struct nlattr*)((char*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family_))));
+	nla->nla_len = NLA_HDRLEN + sizeof(loc_id_);
+	nla->nla_type = MPTCP_ATTR_LOC_ID;
+	memcpy((char*)nla + NLA_HDRLEN, &loc_id_, sizeof(loc_id_));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id_));
+
+	// Set rem_id to nlattr
+	nla = (struct nlattr*)((char*)request.payload 
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id_))));
+	nla->nla_len = NLA_HDRLEN + sizeof(rem_id_);
+	nla->nla_type = MPTCP_ATTR_REM_ID;
+	memcpy((char*)nla + NLA_HDRLEN, &rem_id_, sizeof(rem_id_));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(rem_id_));
+
+	// Set dest_address_ipv4 to nlattr
+	nla = (struct nlattr*)((char*)request.payload
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(rem_id_))));
+	nla->nla_len = NLA_HDRLEN + sizeof(daddr4_);
+	nla->nla_type = MPTCP_ATTR_DADDR4;
+	memcpy((char*)nla + NLA_HDRLEN, &daddr4_, sizeof(daddr4_));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(daddr4_));
+
+	// Set dest_port to nlattr
+	nla = (struct nlattr*)((char*)request.payload
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(token_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(family_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(loc_id_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(rem_id_)))
+				+ (NLA_HDRLEN + NLA_ALIGN(sizeof(daddr4_))));
+	nla->nla_len = NLA_HDRLEN + sizeof(dport_);
+	nla->nla_type = MPTCP_ATTR_DPORT;
+	memcpy((char*)nla + NLA_HDRLEN, &dport_, sizeof(dport_));
+	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(dport_));
+
+	printf("\n");
+	char *ptr = (char*)&request;
+	for(int i=0; i<request.nh.nlmsg_len; i++){
+		printf("%02x ", *(ptr+i));
+	}
+	printf("\n");
+
+	// Send to request
+	memset(&nl_addr, 0, sizeof(nl_addr));
+	nl_addr.nl_family = AF_NETLINK;
+
+	ret = sendto(instance.fd, (char*)&request, request.nh.nlmsg_len,
+			0, (struct sockaddr*)&nl_addr, sizeof(nl_addr));
+	if(ret != request.nh.nlmsg_len) {
+		perror("sendto(NETLINK_GENERIC) : ");
+		fprintf(stderr, "sendto(NETLINK_GENERIC) errno : %d\n", errno);
+		return -1;
+	}
+
+	/* 2 : create_subflow code end */
+
+
+
+
+
+	/*
+
 	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
 	while(nsize!=fsize){
 		int fpsize = fread(send_buff, 1, 1024, file);
 		nsize += fpsize;
 
-		//send(sock, send_buff, fpsize, 0);
+		send(sock, send_buff, fpsize, 0);
 	}
+	*/
 	
 	fclose(file);
 	close(sock);
@@ -323,9 +432,7 @@ int lookup_gennl_family_id(struct nl_sock *nl_sock)
 	request.nh.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
 
 	request.gh.cmd = CTRL_CMD_GETFAMILY;
-	request.gh.version = 0x1;
-
-	request.payload = (char*)malloc(256);
+	request.gh.version = MPTCP_GENL_VER;
 
 	nl_na = (struct nlattr*)request.payload;
 	nl_na->nla_type = CTRL_ATTR_FAMILY_NAME;
