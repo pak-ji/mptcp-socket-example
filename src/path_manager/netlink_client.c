@@ -275,7 +275,7 @@ int main(int argc, char** argv)
 
 	memset(&request, 0, sizeof(request));
 
-	uint32_t token_ = get_token(0); // get local token
+	uint32_t token_ = get_token(1); // get local token
 	uint16_t family_ = AF_INET;
 	uint8_t loc_id_ = 1;
 	uint8_t rem_id_ = 0;
@@ -372,8 +372,6 @@ int main(int argc, char** argv)
 
 
 
-	/*
-
 	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
 	while(nsize!=fsize){
 		int fpsize = fread(send_buff, 1, 1024, file);
@@ -381,7 +379,6 @@ int main(int argc, char** argv)
 
 		send(sock, send_buff, fpsize, 0);
 	}
-	*/
 	
 	fclose(file);
 	close(sock);
