@@ -347,12 +347,14 @@ int main(int argc, char** argv)
 	memcpy((char*)nla + NLA_HDRLEN, &dport_, sizeof(dport_));
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(dport_));
 
+	/*
 	printf("\n");
 	char *ptr = (char*)&request;
 	for(int i=0; i<request.nh.nlmsg_len; i++){
 		printf("%02x ", *(ptr+i));
 	}
 	printf("\n");
+	*/
 
 	// Send to request
 	memset(&nl_addr, 0, sizeof(nl_addr));
@@ -372,6 +374,7 @@ int main(int argc, char** argv)
 
 
 
+	/*
 	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
 	while(nsize!=fsize){
 		int fpsize = fread(send_buff, 1, 1024, file);
@@ -379,6 +382,7 @@ int main(int argc, char** argv)
 
 		send(sock, send_buff, fpsize, 0);
 	}
+	*/
 	
 	fclose(file);
 	close(sock);
