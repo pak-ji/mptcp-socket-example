@@ -160,22 +160,19 @@ int main(int argc, char** argv)
 	addr.sin_addr.s_addr = inet_addr(ADDR);
 	addr.sin_port = htons(PORT);
 
-	ret = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-	if(ret < 0){
-		perror("[client] connect() ");
-		return -1;
-	}
-	printf("[client] connected\n");
 
-	file = fopen(FILE_PATH, "rb");
-	if(file == NULL){
-		perror("[client] fopen() ");
-		return -1;
-	}
 
-	fsize = get_fsize(file);
 
-	/* generic netlik api craete */
+
+
+	/**
+	 * Netlink API - Init the Netlink API
+	 **/
+	struct gennl_ins_msg request, response;
+	struct nlattr* nla;
+
+	struct sockaddr_nl nl_addr;
+
 	ret = create_gennl_sock(&instance);
 	if(ret < 0) return -1;
 	instance.family_id = lookup_gennl_family_id(&instance);
@@ -185,24 +182,82 @@ int main(int argc, char** argv)
 
 
 	/**
-	 * MPTCP Signal 전송하기(using Genlink API)
+	 * Netlink API - Wait the MP_CAPABLE Event
 	 *
-	 * n초 마다 Signal을 전송
-	 * 단, Count를 둬서 서로 다른 Signal을 전송
-	 *
-	 * 1 : add_addr
-	 * 2 : create_subflow
-	 **/
-	struct gennl_ins_msg request;
-	struct nlattr* nla;
-
+	 * FIXME
+	 */
 	memset(&request, 0, sizeof(request));
+	memset(&response, 0, sizeof(response));
+
+	request.nh.nlmsg_len = NLMSG_HDRLEN + GENL_HDRLEN;
+	request.nh.nlmsg_type = instance.family_id;
+	request.nh.nlmsg_flags = NLM_F_REQUEST;
+	request.nh.nlmsg_pid = getpid();
+
+	request.gh.cmd = MPTCP_EVENT_CREATED;
+	request.gh.version = MPTCP_GENL_VER;	
+
+	// Send to request
+	memset(&nl_addr, 0, sizeof(nl_addr));
+	nl_addr.nl_family = AF_NETLINK;
+	nl_addr.nl_groups = 1;
+
+	ret = sendto(instance.fd, (char*)&request, request.nh.nlmsg_len,
+			0, (struct sockaddr*)&nl_addr, sizeof(nl_addr));
+	if(ret != request.nh.nlmsg_len) {
+		perror("sendto(NETLINK_GENERIC) : ");
+		fprintf(stderr, "sendto(NETLINK_GENERIC) errno : %d\n", errno);
+		return -1;
+	}
 
 
 
 
 
-	/* 1 : add_addr code start */
+
+	/**
+	 * MPTCP - Start the MP_CAPABLE
+	 */
+	ret = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+	if(ret < 0){
+		perror("[client] connect() ");
+		return -1;
+	}
+	printf("[client] connected\n");
+
+
+
+	sleep(1);
+
+	/**
+	 * Netlink API - Received the MP_CAPABLE Event
+	 */
+	/*
+	ret = recv(instance.fd, &response, sizeof(response), 0);
+	if(ret < 0) {
+		perror("recv(NETLINK_GENERIC) : ");
+		return -1;
+	}
+	if(!NLMSG_OK((&response.nh), ret)) {
+		perror("NLMSG_OK() : ");
+		return -1;
+	}
+	if(response.nh.nlmsg_type == NLMSG_ERROR) {
+		perror("NLMSG_ERROR : ");
+		return -1;
+	}
+	*/
+
+
+
+
+
+
+
+	/**
+	 * Netlink API - Start the ADD_ADDR CMD
+	 */
+	memset(&request, 0, sizeof(request));
 
 	uint32_t token = get_token(1); // get local token
 	uint8_t loc_id = 1;
@@ -252,7 +307,6 @@ int main(int argc, char** argv)
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(saddr4));
 
 	// Send to request
-	struct sockaddr_nl nl_addr;
 	memset(&nl_addr, 0, sizeof(nl_addr));
 	nl_addr.nl_family = AF_NETLINK;
 
@@ -264,15 +318,16 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	/* 1 : add_addr code end */
 
 
 
 
 
 
-	/* 2 : create_subflow code start */
-
+	/**
+	 * Netlink API - Start the MP_JOIN CMD
+	 */
+	/*
 	memset(&request, 0, sizeof(request));
 
 	uint32_t token_ = get_token(1); // get local token
@@ -347,15 +402,6 @@ int main(int argc, char** argv)
 	memcpy((char*)nla + NLA_HDRLEN, &dport_, sizeof(dport_));
 	request.nh.nlmsg_len += NLA_HDRLEN + NLA_ALIGN(sizeof(dport_));
 
-	/*
-	printf("\n");
-	char *ptr = (char*)&request;
-	for(int i=0; i<request.nh.nlmsg_len; i++){
-		printf("%02x ", *(ptr+i));
-	}
-	printf("\n");
-	*/
-
 	// Send to request
 	memset(&nl_addr, 0, sizeof(nl_addr));
 	nl_addr.nl_family = AF_NETLINK;
@@ -367,12 +413,20 @@ int main(int argc, char** argv)
 		fprintf(stderr, "sendto(NETLINK_GENERIC) errno : %d\n", errno);
 		return -1;
 	}
-
-	/* 2 : create_subflow code end */
-
+	*/
 
 
 
+
+
+
+	file = fopen(FILE_PATH, "rb");
+	if(file == NULL){
+		perror("[client] fopen() ");
+		return -1;
+	}
+
+	fsize = get_fsize(file);
 
 	/*
 	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
