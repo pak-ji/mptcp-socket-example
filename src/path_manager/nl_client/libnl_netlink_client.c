@@ -137,7 +137,6 @@ int main(int argc, char** argv)
 	 * libnl generic netlink api init
 	 */
         struct nl_sock* nlsock = NULL;
-	struct nl_msg* msg = NULL;
 
         int family_id, group_id;
 	int check = 0;
@@ -232,15 +231,30 @@ int main(int argc, char** argv)
 	 * @attr : family	family(AF_INET or AF_INET6)
 	 * @attr : saddr	local ip
 	 */
+	struct nl_sock *nlsock_for_cmd = NULL;
+	struct nl_msg* msg = NULL;
+
 	uint32_t token = get_token(1);
 	uint8_t loc_id = 1;
 	uint16_t family = AF_INET;
 	uint32_t saddr = inet_addr("192.168.1.10");
 
+	nlsock_for_cmd = nl_socket_alloc();
+	if(!nlsock_for_cmd) {
+		perror("nl_socket_alloc() ");
+		return -1;
+	}
+
+	if(genl_connect(nlsock_for_cmd) ){
+		perror("genl_connect() ");
+		nl_socket_free(nlsock_for_cmd);
+		return -1;
+	}
+
 	msg = nlmsg_alloc();
 	if(!msg) {
 		perror("nlmsg_alloc() ");
-		nl_socket_free(nlsock);
+		nl_socket_free(nlsock_for_cmd);
 		return -1;
 	}
 
@@ -265,11 +279,11 @@ int main(int argc, char** argv)
 	}
 	check = 0;
 
-	ret = nl_send_auto(nlsock, msg);
+	ret = nl_send_auto(nlsock_for_cmd, msg);
 	if(ret < 0) {
 		perror("nl_send_auto() ");
 		nlmsg_free(msg);
-		nl_socket_free(nlsock);
+		nl_socket_free(nlsock_for_cmd);
 		return -1;
 	}
 
@@ -310,6 +324,7 @@ int main(int argc, char** argv)
 	pthread_join(p_thread[0], (void**)&status);
 	fclose(file);
 	nl_socket_free(nlsock);
+	nl_socket_free(nlsock_for_cmd);
 	close(sock);
 
 	return 0;
