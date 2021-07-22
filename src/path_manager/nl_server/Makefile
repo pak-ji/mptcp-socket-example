@@ -4,13 +4,13 @@ TARGET=libnl_netlink_server
 OBJS=libnl_netlink_server.o ../token/token.o
 
 $(TARGET) : $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS)
+	$(CC) -o $@ $(OBJS) $(CFLAGS)
 
 ../token/token.o : ../token/token.c
-	$(CC) $(CFLAGS) -c -o ../token/token.o ../token/token.c
+	$(CC) -c -o ../token/token.o ../token/token.c $(CFLAGS)
 
 libnl_netlink_server.o : libnl_netlink_server.c
-	$(CC) $(CFLAGS) -c libnl_netlink_server.c
+	$(CC) -c libnl_netlink_server.c $(CFLAGS)
 
 clean:
 	rm $(OBJS) $(TARGET)
