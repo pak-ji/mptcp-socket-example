@@ -33,11 +33,16 @@
 #include "../token/token.h"
 
 
-#define DEBUG 1
+#define DEBUG 0 
 
-
-
-
+/* variable for mptcp netlink api */
+uint32_t token = 0;
+uint16_t family = AF_INET;
+uint32_t saddr = 0;
+uint32_t daddr = 0;
+uint16_t dport = 0;
+uint8_t loc_id = 0;
+uint8_t rem_id = 0;
 
 
 /* mptcp event recv */
@@ -219,25 +224,38 @@ int main(int argc, char** argv)
 	}
 	printf("[client] connected\n");
 
+	/**
+	 * Sending data
+	 */
+	file = fopen(FILE_PATH, "rb");
+	if(file == NULL){
+		perror("[client] fopen() ");
+		return -1;
+	}
+
+	fsize = get_fsize(file);
+
+	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
+	while(nsize!=fsize){
+		int fpsize = fread(send_buff, 1, 1024, file);
+		nsize += fpsize;
+
+		send(sock, send_buff, fpsize, 0);
+	}
+
+
+
+
+
+
+
+
 
 
 	/**
-	 * netlink api send message to kernel
-	 *
-	 * @cmd : MPTCP_CMD_ANNOUNCE
-	 *
-	 * @attr : token	local token
-	 * @attr : loc_id	local address id
-	 * @attr : family	family(AF_INET or AF_INET6)
-	 * @attr : saddr	local ip
+	 * init netlink api socket to send command
 	 */
 	struct nl_sock *nlsock_for_cmd = NULL;
-	struct nl_msg* msg = NULL;
-
-	uint32_t token = get_token(1);
-	uint8_t loc_id = 1;
-	uint16_t family = AF_INET;
-	uint32_t saddr = inet_addr("192.168.1.10");
 
 	nlsock_for_cmd = nl_socket_alloc();
 	if(!nlsock_for_cmd) {
@@ -250,6 +268,24 @@ int main(int argc, char** argv)
 		nl_socket_free(nlsock_for_cmd);
 		return -1;
 	}
+
+
+
+	/**
+	 * netlink api send message to kernel
+	 *
+	 * @cmd : MPTCP_CMD_ANNOUNCE
+	 *
+	 * @attr : token	local token
+	 * @attr : loc_id	local address id
+	 * @attr : family	family(AF_INET or AF_INET6)
+	 * @attr : saddr	local ip
+	 */
+	token = get_token(1);
+	saddr = inet_addr("192.168.1.10");
+	loc_id = 1; 
+
+	struct nl_msg* msg = NULL;
 
 	msg = nlmsg_alloc();
 	if(!msg) {
@@ -286,34 +322,136 @@ int main(int argc, char** argv)
 		nl_socket_free(nlsock_for_cmd);
 		return -1;
 	}
+	nlmsg_free(msg);
 
+ 
+	// FIXME
+	token = get_token(1);
+	saddr = inet_addr("192.168.1.10");
+	loc_id = 1; 
 
+	msg = NULL;
 
-
-
-
-
-
-
-
-	/**
-	 * Sending data
-	 */
-	file = fopen(FILE_PATH, "rb");
-	if(file == NULL){
-		perror("[client] fopen() ");
+	msg = nlmsg_alloc();
+	if(!msg) {
+		perror("nlmsg_alloc() ");
+		nl_socket_free(nlsock_for_cmd);
 		return -1;
 	}
 
-	fsize = get_fsize(file);
 
-	printf("[client] file sending...(%s) %dB\n", FILE_PATH, fsize);
-	while(nsize!=fsize){
-		int fpsize = fread(send_buff, 1, 1024, file);
-		nsize += fpsize;
-
-		send(sock, send_buff, fpsize, 0);
+	if(!genlmsg_put(msg, getpid(), NL_AUTO_SEQ, family_id, 0, 
+				NLM_F_REQUEST, MPTCP_CMD_ANNOUNCE, MPTCP_GENL_VER)) {
+		perror("genlmsg_put() ");
+		nl_socket_free(nlsock);
+		return -1;
 	}
+
+	check += nla_put(msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+	check += nla_put(msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
+	check += nla_put(msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+	check += nla_put(msg, MPTCP_ATTR_SADDR4, sizeof(saddr), &saddr);
+
+	if(check < 0) {
+		perror("nla_put() ");
+		nlmsg_free(msg);
+		nl_socket_free(nlsock);
+		return -1;
+	}
+	check = 0;
+
+	ret = nl_send_auto(nlsock_for_cmd, msg);
+	if(ret < 0) {
+		perror("nl_send_auto() ");
+		nlmsg_free(msg);
+		nl_socket_free(nlsock_for_cmd);
+		return -1;
+	}
+	nlmsg_free(msg);
+	// FIXME
+
+
+
+	//sleep(2);
+	/**
+	 * netlink api send message to kernel
+	 *
+	 * @cmd : MPTCP_CMD_SUB_CREATE
+	 *
+	 * @attr : token	local token
+	 * @attr : family	family(AF_INET or AF_INET6)
+	 * @attr : loc_id	local address id
+	 * @attr : rem_id	remote address id
+	 * @attr : daddr	remote ip
+	 * @attr : dport	remote port
+	 */
+	token = get_token(0);
+	daddr = inet_addr("192.168.1.11");
+	dport = htons(PORT);
+
+	while(rem_id == 0) {
+		printf("[main] not yet init - rem_id var\n"); 
+		sleep(0.5);
+	}
+
+	msg = nlmsg_alloc();
+	if(!msg) {
+		perror("nlmsg_alloc() ");
+		nl_socket_free(nlsock_for_cmd);
+		return -1;
+	}
+
+	if(!genlmsg_put(msg, getpid(), NL_AUTO_SEQ, family_id, 0, 
+				NLM_F_REQUEST, MPTCP_CMD_SUB_CREATE, MPTCP_GENL_VER)) {
+		perror("genlmsg_put() ");
+		nl_socket_free(nlsock);
+		return -1;
+	}
+
+	printf("token : %X\n", token);
+	printf("family : %d\n", family);
+	printf("loc_id : %d\n", loc_id);
+	printf("rem_id : %d\n", rem_id);
+	printf("daddr : %X\n", daddr);
+	printf("dport : %d\n", ntohs(dport));
+
+	check += nla_put(msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+	check += nla_put(msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+	check += nla_put(msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
+	check += nla_put(msg, MPTCP_ATTR_REM_ID, sizeof(rem_id), &rem_id);
+	check += nla_put(msg, MPTCP_ATTR_DADDR4, sizeof(daddr), &daddr);
+	check += nla_put(msg, MPTCP_ATTR_DPORT, sizeof(dport), &dport);
+
+	struct nlmsghdr* nlmh = nlmsg_hdr(msg);
+	char *ptr = (char*)nlmh;
+	for(int i=0; i<nlmh->nlmsg_len; i++) {
+		printf("%02X ", *(ptr+i));
+	}
+	printf("\n");
+
+	if(check < 0) {
+		perror("nla_put() ");
+		nlmsg_free(msg);
+		nl_socket_free(nlsock);
+		return -1;
+	}
+	check = 0;
+
+	ret = nl_send_auto(nlsock_for_cmd, msg);
+	if(ret < 0) {
+		perror("nl_send_auto() ");
+		nlmsg_free(msg);
+		nl_socket_free(nlsock_for_cmd);
+		return -1;
+	}
+	
+
+
+
+
+
+
+
 
 
 
@@ -321,18 +459,19 @@ int main(int argc, char** argv)
 	/**
 	 * close
 	 */	
-	pthread_join(p_thread[0], (void**)&status);
 	fclose(file);
+	close(sock);
+
+	pthread_join(p_thread[0], (void**)&status);
 	nl_socket_free(nlsock);
 	nl_socket_free(nlsock_for_cmd);
-	close(sock);
 
 	return 0;
 }
 
 void event_rx_thread(void *arg)
 {	
-	int ret, cnt = 0;
+	int ret;
 	char buff[128];
 	struct nl_sock *nlsock = (struct nl_sock*)arg;
 
@@ -341,20 +480,72 @@ void event_rx_thread(void *arg)
 	printf("[thread] nlsock->fd : %d\n", fd);
 #endif
 	while(1){
-		cnt++;
-
 		memset(buff, 0, sizeof(buff));
 		ret = recv(fd, buff, sizeof(buff), 0);
 		if(ret < 0){
 			perror("recv() ");
 			break;
 		}
+		
+		struct nlmsghdr* nlh;
+		struct genlmsghdr* genlh;
+		struct nlattr* nla;
+		struct nlattr* nla_temp;
 
-		printf("[packet num : %d]\n", cnt);
+		int nlmsg_len;
+		int nla_totlen;
+
+		nlh = (struct nlmsghdr*)buff;
+		genlh = (struct genlmsghdr*)genlmsg_hdr(nlh);
+		nla = (struct nlattr*)genlmsg_data(genlh);
+
+		nlmsg_len = nlh->nlmsg_len;
+		nla_totlen = nlmsg_len - (16 + 4); // 16 = NLMSG_HDRLEN / 4 = GENLMSG_HDRLEN
+
+		printf("[thread] received event : ");
+		switch(genlh->cmd){
+			case 1:
+				printf("MPTCP_EVENT_CREATED\n");
+				break;
+
+
+			case 2: 
+				printf("MPTCP_EVENT_ESTABLISHED\n");
+				break;
+
+
+			case 3:
+				printf("MPTCP_EVENT_CLOSED\n");
+				break;
+
+
+			case 6: 
+				printf("MPTCP_EVENT_ANNOUNCED\n");
+				if(rem_id == 0) {	
+					printf("[thread] remote rem_id : ");	
+					nla_temp = nla_find(nla, nla_totlen, MPTCP_ATTR_REM_ID);
+					rem_id = *(uint8_t*)nla_data(nla_temp);
+					printf("%d\n", rem_id);
+				}
+				else {
+					printf("[thread] rem_id already exists\n");
+				}
+				break;
+
+
+			default :
+				printf("??");
+		}
+
+		
+
+#if DEBUG
+		printf("[thread] event packet \n");
 		for(int i=0; i<sizeof(buff); i++) {
 			printf("%02X ", buff[i]);
 		}
 		printf("\n\n");
+#endif
 	}
 }
 
