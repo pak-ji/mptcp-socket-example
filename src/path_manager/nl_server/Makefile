@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-I/usr/include/libnl3 -lnl-genl-3 -lnl-3 -Wno-implicit-function-declaration  
+CFLAGS=-I/usr/include/libnl3 -lnl-genl-3 -lnl-3 -lpthread -Wno-implicit-function-declaration  
 TARGET=libnl_netlink_server
 OBJS=libnl_netlink_server.o ../token/token.o
 

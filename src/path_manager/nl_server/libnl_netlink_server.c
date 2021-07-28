@@ -16,19 +16,26 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
+#include <pthread.h>
+
 #include <netlink/msg.h>
 #include <netlink/attr.h>
 
 #include "../../header/mptcp.h"
 #include "../../header/mptcp_netlink_api.h"
-#include "../token/token.h"
+//#include "../token/token.h"
 
-/**
- * 기존의 TCP Server는 { socket() -> bind() -> listen() -> accept() -> recv(), send() -> close() }순서로 흘러간다.
- * 여기서 TCP Socket을 MPTCP Socket으로 설정하기 위해서는 socket()과 bind()사이에 setsockopt()을 사용한다.
- **/
+#define DEBUG 0
+
+/* mptcp subflow policy proceed thread */
+void subflow_policy_thread(void*);
+
+/* main function */
 int main(int argc, char** argv)
 {
+	/**
+	 * Variable of mptcp socket
+	 */
 	int PORT;
 	const char* FILE_NAME = "recv_file";
 
@@ -44,67 +51,56 @@ int main(int argc, char** argv)
 
 	char* manager = "netlink";
 
+	/**
+	 * Variable of thread
+	 */
+	pthread_t p_thread[1];
+	int th_id;
+	int status;
+
+
+
+
+	/**
+	 * start main function
+	 */
 	if(argc != 2){
 		fprintf(stderr, "usage: %s [port_number]\n", argv[0]);
 		return -1;
 	}
 	PORT = atoi(argv[1]);
 
+	/* start the thread */
+	th_id = pthread_create(&p_thread[0], NULL, (void*)subflow_policy_thread, NULL);
+	if(th_id < 0){
+		perror("[main] pthread_create() ");
+		return -1;
+	}
+	printf("[main] start the subflow policy thread\n");
+
+	/* create socket */
 	server_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(server_sock < 0){
-		perror("[server] socket() ");
+		perror("[main] socket() ");
 		return -1;
 	}
 
 	/* setsockopt()함수와 MPTCP_ENABLED(=42)상수를 사용하여 MPTCP Socket으로 Setup */
 	ret = setsockopt(server_sock, SOL_TCP, MPTCP_ENABLED, &enable, sizeof(int));
 	if(ret < 0){
-		perror("[server] setsockopt(MPTCP_ENABLED) ");
+		perror("[main] setsockopt(MPTCP_ENABLED) ");
 		return -1;
 	}
 
 	/* setsockopt()함수와 MPTCP_PATH_MANAGER(=44)상수를 사용하여 MPTCP의 Path Manager 변경 */
 	ret = setsockopt(server_sock, SOL_TCP, MPTCP_PATH_MANAGER, manager, strlen(manager));
 	if(ret < 0){
-		perror("[server] setsockopt(MPTCP_PATH_MANAGER) ");
-		return -1;
-	}
-
-
-	/**
-	 * libnl generic netlink api init
-	 */
-	struct nl_sock *nlsock = NULL;
-	struct nl_msg* msg = NULL;
-
-	int family_id;
-	int check = 0;
-
-	nlsock = nl_socket_alloc();
-	if(!nlsock) {
-		perror("nl_socket_alloc() ");
-		return -1;
-	}
-
-	if(genl_connect(nlsock)) {
-		perror("genl_connect() ");
-		nl_socket_free(nlsock);
+		perror("[main] setsockopt(MPTCP_PATH_MANAGER) ");
 		return -1;
 	}
 
 	/**
-	 * lookup mptcp genl family id
-	 */
-	family_id = genl_ctrl_resolve(nlsock, MPTCP_GENL_NAME);
-	if(family_id < 0) {
-		perror("genl_ctrl_resolve() ");
-		nl_socket_free(nlsock);
-		return -1;
-	}
-
-
-	/**
-	 * Open mptcp socket
+	 * bind mptcp socket
 	 */
 	memset(&server_addr, 0x00, sizeof(struct sockaddr_in));
 	server_addr.sin_family = AF_INET;
@@ -113,13 +109,13 @@ int main(int argc, char** argv)
 
 	ret = bind(server_sock, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in));
 	if(ret < 0){
-		perror("[server] bind() ");
+		perror("[main] bind() ");
 		return -1;
 	}	
 
 	ret = listen(server_sock, 5);
 	if(ret < 0){
-		perror("[server] listen() ");
+		perror("[main] listen() ");
 		return -1;
 	}
 
@@ -129,72 +125,17 @@ int main(int argc, char** argv)
 	addr_len = sizeof(struct sockaddr_in);
 	client_sock = accept(server_sock, (struct sockaddr*)&client_addr, &addr_len);	
 	if(client_sock < 0){
-		perror("[server] accept() ");
+		perror("[main] accept() ");
 		return -1;
 	}
-	printf("[server] connected client\n");
-
-
-	/**
-	 * netlink api send message to kernel
-	 * 
-	 * @cmd : MPTCP_CMD_ANNOUNCE
-	 *
-	 * @attr : token	local token
-	 * @attr : loc_id	local address id
-	 * @attr : family	family(AF_INET or AF_INET6)
-	 * @attr : saddr	local ip
-	 */
-	uint32_t token = get_token(1);
-	uint8_t loc_id = 10;
-	uint16_t family = AF_INET;
-	uint32_t saddr = inet_addr("192.168.1.11");
-
-	msg = nlmsg_alloc();
-	if(!msg) {
-		perror("nlmsg_alloc() ");
-		nl_socket_free(nlsock);
-		return -1;
-	}
-
-	if(!genlmsg_put(msg, getpid(), NL_AUTO_SEQ, family_id, 0,
-				NLM_F_REQUEST, MPTCP_CMD_ANNOUNCE, MPTCP_GENL_VER)) {
-		perror("genlmsg_putr() ");
-		nl_socket_free(nlsock);
-		return -1;
-	}
-
-	check += nla_put(msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
-	check += nla_put(msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
-	check += nla_put(msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
-	check += nla_put(msg, MPTCP_ATTR_SADDR4, sizeof(saddr), &saddr);
-
-	if(check < 0) {
-		perror("nla_putr() ");
-		nlmsg_free(msg);
-		nl_socket_free(nlsock);
-		return -1;
-	}
-	check = 0;
-
-	ret = nl_send_auto(nlsock, msg);
-	if(ret < 0) {
-		perror("nl_send_auto() ");
-		nlmsg_free(msg);
-		nl_socket_free(nlsock);
-		return -1;
-	}
-
-
-
-
+	printf("[main] connected client\n");
 
 	/**
 	 * Receving data
 	 */
 	file = fopen(FILE_NAME, "wb");
 	if(file == NULL){
-		perror("[server] fopen() ");
+		perror("[main] fopen() ");
 		return -1;
 	}
 
@@ -202,11 +143,150 @@ int main(int argc, char** argv)
 		nsize = recv(client_sock, buffer, 1024, 0);
 		fwrite(buffer, sizeof(char), nsize, file);
 	}while(nsize!=0);
-	printf("[server] received file\n");
+	printf("[main] received file\n");
 	
 	fclose(file);
 	close(client_sock);
 	close(server_sock);
 
+	pthread_join(p_thread[0], (void**)&status);
 	return 0;
+}
+
+
+
+void subflow_policy_thread(void* arg)
+{
+
+	/**
+	 * Variable of generic netlink
+	 */
+	struct 	nl_sock*	event_recv_sock	= NULL;
+	struct 	nl_sock*	cmd_send_sock	= NULL;
+	struct 	nl_msg*		send_msg	= NULL;
+	char	recv_buff[1024]			= { '\0', };
+	int	family_id;
+	int	group_id;
+	int 	check;
+	int 	ret;
+
+	/**
+	 * Variable of receive event
+	 */
+	struct 	nlmsghdr*	nlh		= NULL;
+	struct 	genlmsghdr*	genlh		= NULL;
+	struct 	nlattr*		nla		= NULL;
+	struct 	nlattr*		nla_tmp		= NULL;
+	int 	nlmsg_len;
+	int	nla_totlen;
+
+	/**
+	 * Variable of cmd attributes
+	 */
+	uint32_t	token	= 0;
+	uint16_t	family	= AF_INET;
+	uint32_t	saddr	= 0;
+	uint32_t	daddr	= 0;
+	uint16_t	dport	= 0;
+	uint8_t		loc_id	= 0;
+	uint8_t		rem_id	= 0;
+
+
+
+	/**
+	 * Socket init (sender, receiver)
+	 */
+	event_recv_sock = nl_socket_alloc();
+	if(!event_recv_sock){
+		perror("[thread] event_recv_sock = nl_socket_alloc() ");
+		return;
+	}
+
+	cmd_send_sock = nl_socket_alloc();
+	if(!cmd_send_sock){
+		perror("[thread] cmd_send_sock = nl_socket_alloc() ");
+		return;
+	}
+
+	if(genl_connect(event_recv_sock)){
+		perror("[thread] genl_connect(event_recv_sock)");
+		return;
+	}
+
+	if(genl_connect(cmd_send_sock)){
+		perror("[thread] genl_connect(cmd_send_sock");
+		return;
+	}
+
+	/**
+	 * lookup (family_id, group_id)
+	 */
+	family_id = genl_ctrl_resolve(event_recv_sock, MPTCP_GENL_NAME);
+	if(family_id < 0){
+		perror("[thread] genl_ctrl_resolve() ");
+		return;
+	}
+
+	group_id = genl_ctrl_resolve_grp(event_recv_sock, MPTCP_GENL_NAME, MPTCP_GENL_EV_GRP_NAME);
+	if(group_id < 0){
+		perror("[thread] genl_ctrl_resolve_grp() ");
+		return;
+	}
+
+	/**
+	 * join group
+	 */
+	ret = nl_socket_add_membership(event_recv_sock, group_id);
+	if(ret < 0){
+		perror("[thread] nl_socket_add_membersihp() ");
+		return;
+	}
+
+
+	/**
+	 * recv event
+	 */
+	while(1){
+		memset(recv_buff, 0, sizeof(recv_buff));
+		ret = recv(nl_socket_get_fd(event_recv_sock), recv_buff, sizeof(recv_buff), 0);
+		if(ret < 0){
+			perror("[thread] recv() ");
+			return;
+		}
+
+		nlh = (struct nlmsghdr*)recv_buff;
+		genlh = (struct genlmsghdr*)((char*)nlh+16);
+		nla = (struct nlattr*)genlmsg_data(genlh);
+
+		nlmsg_len = nlh->nlmsg_len;
+		nla_totlen = nlmsg_len - (16 + 4); // 16 - NLMSG_HDRLEN / 4 - GENLMSG_HDRLEN
+
+		printf("[thread] received events : ");
+		switch(genlh->cmd){
+			case MPTCP_EVENT_CREATED:
+				printf("MPTCP_EVENT_CREATED\n");
+				break;
+
+			case MPTCP_EVENT_ESTABLISHED:
+				printf("MPTCP_EVENT_ESTABLISHED\n");
+				
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_TOKEN);
+				token = *(uint32_t*)nla_data(nla_tmp);
+
+				printf("token : %X\n", token);
+
+				break;
+
+			case MPTCP_EVENT_CLOSED:
+				printf("MPTCP_EVENT_CLOSED\n");
+				break;
+
+			case MPTCP_EVENT_ANNOUNCED:
+				printf("MPTCP_EVNET_ANNOUNCED\n");
+				break;
+
+			default:
+				printf("??\n");
+		}
+	}
 }
