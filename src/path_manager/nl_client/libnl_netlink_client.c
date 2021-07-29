@@ -302,7 +302,7 @@ void subflow_policy_thread(void *arg)
 
 			case MPTCP_EVENT_ESTABLISHED:
 				printf("MPTCP_EVENT_ESTABLISHED\n");
-				
+
 				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_TOKEN);
 				token = *(uint32_t*)nla_data(nla_tmp);
 
@@ -324,7 +324,7 @@ void subflow_policy_thread(void *arg)
 					return;
 				}
 
-				if(!genlmsg_put(send_msg,getpid(), NL_AUTO_SEQ, family_id, 0,
+				if(!genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
 							NLM_F_REQUEST, MPTCP_CMD_ANNOUNCE, MPTCP_GENL_VER)){
 					perror("genlmsg_put() ");
 					return;
@@ -356,10 +356,27 @@ void subflow_policy_thread(void *arg)
 
 			case MPTCP_EVENT_ANNOUNCED:
 				printf("MPTCP_EVENT_ANNOUNCED\n");
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_REM_ID);
+				rem_id = *(uint8_t*)nla_data(nla_tmp);
+
+				printf("rem_id : %d\n", rem_id);
+
+				break;
+
+			case MPTCP_EVENT_SUB_CLOSED:
+				printf("MPTCP_EVENT_SUB_CLOSED\n");
 				break;
 
 			default:
 				printf("??\n");
+
+				char* ptr = (char*)nlh;
+				for(int i=0; i<nlmsg_len; i++){
+					printf("%02X ", *(ptr+i));
+				}
+				printf("\n\n");
+
 
 		}
 	}
