@@ -255,8 +255,8 @@ void subflow_policy_thread(void* arg)
 		}
 
 		nlh = (struct nlmsghdr*)recv_buff;
-		genlh = (struct genlmsghdr*)((char*)nlh+16);
-		nla = (struct nlattr*)genlmsg_data(genlh);
+		genlh = (struct genlmsghdr*)((char*)nlh+16); // 16 - NLMSG_HDRLEN
+		nla = (struct nlattr*)((char*)genlh+4); // 4 - GENLMSG_HDRLEN
 
 		nlmsg_len = nlh->nlmsg_len;
 		nla_totlen = nlmsg_len - (16 + 4); // 16 - NLMSG_HDRLEN / 4 - GENLMSG_HDRLEN
@@ -273,7 +273,46 @@ void subflow_policy_thread(void* arg)
 				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_TOKEN);
 				token = *(uint32_t*)nla_data(nla_tmp);
 
-				printf("token : %X\n", token);
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DPORT);
+				dport = *(uint16_t*)nla_data(nla_tmp);
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DADDR4);
+				daddr = *(uint32_t*)nla_data(nla_tmp);
+
+				/**
+				 * request the MPTCP_CMD_ANNOUNCE to netlink api
+				 */
+				saddr = inet_addr("192.168.1.11");
+				loc_id = 8;
+
+				send_msg = nlmsg_alloc();
+				if(!send_msg){
+					perror("nlmsg_alloc() ");
+					return;
+				}
+
+				if(!genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
+							NLM_F_REQUEST, MPTCP_CMD_ANNOUNCE, MPTCP_GENL_VER)){
+					perror("genlmsg_put() ");
+					return;
+				}
+
+				check += nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+				check += nla_put(send_msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
+				check += nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+				check += nla_put(send_msg, MPTCP_ATTR_SADDR4, sizeof(saddr), &saddr);
+
+				if(check < 0){
+					perror("nla_put() ");
+					return;
+				}
+
+				ret = nl_send_auto(cmd_send_sock, send_msg);
+				if(ret < 0){
+					perror("nl_send_auto() ");
+					return;
+				}
+				nlmsg_free(send_msg);
 
 				break;
 
