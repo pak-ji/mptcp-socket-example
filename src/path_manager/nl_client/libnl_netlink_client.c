@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -30,15 +31,49 @@
 
 #include "../../header/mptcp.h"
 #include "../../header/mptcp_netlink_api.h"
-//#include "../token/token.h"
 
-#define DEBUG 0 
+#define CMD_ERROR_DEBUG 1
+#define EVENT_ERROR_DEBUG 1
 
-/* mptcp subflow policy proceed thread */
-void subflow_policy_thread(void*);
+/** 
+ * Global variable of cmd attributes  
+ */
+uint32_t	token		= 0;
+uint16_t	family		= AF_INET;
 
-/* etc function */
-int get_fsize(FILE*);
+uint32_t	saddr_main	= 0;
+uint16_t	sport_main	= 0;
+uint32_t	saddr_sub	= 0;
+uint16_t	sport_sub	= 0;
+
+uint32_t	daddr_main	= 0;
+uint16_t	dport_main	= 0;
+
+uint8_t		loc_id		= 0;
+uint8_t		rem_id		= 0;
+
+uint8_t		backup		= 0;
+
+uint32_t	if_idx		= 0;
+
+
+
+
+/**
+ * Global variable of mptcp event
+ */
+bool created = false;
+bool established = false;
+bool announced = false;
+bool closed = false;
+bool sub_established = false;
+
+
+
+
+/* thread function */
+void event_rx_thread(void*);
+void cmd_tx_thread(void*);
 
 /* main function */
 int main(int argc, char** argv)
@@ -69,8 +104,8 @@ int main(int argc, char** argv)
 	/**
 	 * Variable of thread
 	 */
-	pthread_t p_thread[1];
-	int th_id;
+	pthread_t p_thread[2];
+	int th_id_1, th_id_2;
 	int status;
 
 
@@ -90,10 +125,11 @@ int main(int argc, char** argv)
 	FILE_PATH = argv[3];
 
 	/* start the thread */
-	th_id = pthread_create(&p_thread[0], NULL, (void*)subflow_policy_thread, NULL);
-	if(th_id < 0){
+	th_id_1 = pthread_create(&p_thread[0], NULL, (void*)event_rx_thread, NULL);
+	th_id_2 = pthread_create(&p_thread[1], NULL, (void*)cmd_tx_thread, NULL);
+	if(th_id_1 < 0 || th_id_2 < 0){
 		perror("[main] pthread_create() ");
-		return -1;;
+		return -1;
 	}
 	printf("[main] start the subflow policy thread\n");
 
@@ -152,7 +188,11 @@ int main(int argc, char** argv)
 		perror("[main] fopen() ");
 		return -1;
 	}
-	fsize = get_fsize(file);
+
+	fseek(file, 0, SEEK_END);
+	fsize = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
 	printf("[main] file sending...(%s) %dB\n", FILE_PATH, fsize);
 	while(nsize!=fsize){
 		int fpsize = fread(send_buff, 1, 1024, file);
@@ -169,6 +209,7 @@ int main(int argc, char** argv)
 	close(sock);
 
 	pthread_join(p_thread[0], (void**)&status);
+	pthread_join(p_thread[1], (void**)&status);
 	return 0;
 }
 
@@ -176,15 +217,13 @@ int main(int argc, char** argv)
 
 
 
-void subflow_policy_thread(void *arg)
+void event_rx_thread(void *arg)
 {
 
 	/**
 	 * Variable of generic netlink 
 	 */
 	struct 	nl_sock*	event_recv_sock = NULL;
-	struct 	nl_sock*	cmd_send_sock 	= NULL;
-	struct 	nl_msg*		send_msg	= NULL;
 	char 	recv_buff[1024]			= { '\0', };
 	int	family_id;
 	int	group_id;
@@ -201,16 +240,7 @@ void subflow_policy_thread(void *arg)
 	int	nlmsg_len;
 	int	nla_totlen;
 
-	/** 
-	 * Variable of cmd attributes  
-	 */
-	uint32_t	token	= 0;
-	uint16_t	family	= AF_INET;
-	uint32_t	saddr	= 0;
-	uint32_t	daddr	= 0;
-	uint16_t	dport	= 0;
-	uint8_t		loc_id	= 0;
-	uint8_t		rem_id	= 0;
+
 	
 	
 
@@ -219,71 +249,47 @@ void subflow_policy_thread(void *arg)
 	 */
 	event_recv_sock = nl_socket_alloc();
 	if(!event_recv_sock){
-		perror("[thread] event_recv_sock = nl_socket_alloc() ");
-		return;
-	}
-
-	cmd_send_sock = nl_socket_alloc();
-	if(!cmd_send_sock){
-		perror("[thread] cmd_send_sock = nl_socket_alloc() ");
+		perror("[event_rx_thread] event_recv_sock = nl_socket_alloc() ");
 		return;
 	}
 
 	if(genl_connect(event_recv_sock)){
-		perror("[thread] genl_connect(event_recv_sock) ");
+		perror("[event_rx_thread] genl_connect(event_recv_sock) ");
 		return;
 	}
-
-	if(genl_connect(cmd_send_sock)){
-		perror("[thread] genl_connect(cmd_send_sock) ");
-		return;
-	}
-
-
 
 	/**
 	 * lookup (family_id, group_id)
 	 */
 	family_id = genl_ctrl_resolve(event_recv_sock, MPTCP_GENL_NAME);
 	if(family_id < 0){
-		perror("[thread] genl_ctrl_resolve() ");
+		perror("[event_rx_thread] genl_ctrl_resolve() ");
 		return;
 	}
 
 	group_id = genl_ctrl_resolve_grp(event_recv_sock, MPTCP_GENL_NAME, MPTCP_GENL_EV_GRP_NAME);
 	if(group_id < 0){
-		perror("[thread] genl_ctrl_resolve_grp() ");
+		perror("[event_rx_thread] genl_ctrl_resolve_grp() ");
 		return;
 	}
-
-
 
 	/**
 	 * join group
 	 */
 	ret = nl_socket_add_membership(event_recv_sock, group_id);
 	if(ret < 0){
-		perror("[thread] nl_socket_add_membership() ");
+		perror("[event_rx_thread] nl_socket_add_membership() ");
 		return;
 	}
 
-
-
 	/**
-	 * while(1) 
-	 * 	recv buff set zero bit
-	 * 	recv event
-	 * 	switch(event)
-	 * 		case MPTCP_ESTABLISHED:
-	 * 			execute CMD_ANNOUNCE
-	 * 		case MPTCP_ANNOUNCED:
-	 * 			execute CMD_SUB_CREATE
+	 * recv event
 	 */
 	while(1){
 		memset(recv_buff, 0, sizeof(recv_buff));
 		ret = recv(nl_socket_get_fd(event_recv_sock), recv_buff, sizeof(recv_buff), 0);
 		if(ret < 0){
-			perror("[thread] recv() ");
+			perror("[event_rx_thread] recv() ");
 			return;
 		}
 
@@ -294,64 +300,51 @@ void subflow_policy_thread(void *arg)
 		nlmsg_len = nlh->nlmsg_len;
 		nla_totlen = nlmsg_len - (16 + 4); // 16 = NLMSG_HDRLEN / 4 = GENLMSG_HDRLEN
 
-		printf("[thread] received event : ");
+#if EVENT_ERROR_DEBUG
+		unsigned char* ptr = NULL;
+#endif
+		printf("[%s] received event : ", __FUNCTION__);
 		switch(genlh->cmd){
 			case MPTCP_EVENT_CREATED:
 				printf("MPTCP_EVENT_CREATED\n");
-				break;
-
-			case MPTCP_EVENT_ESTABLISHED:
-				printf("MPTCP_EVENT_ESTABLISHED\n");
 
 				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_TOKEN);
 				token = *(uint32_t*)nla_data(nla_tmp);
 
-				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DPORT);
-				dport = *(uint16_t*)nla_data(nla_tmp);
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_SADDR4);
+				saddr_main = *(uint32_t*)nla_data(nla_tmp);
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_SPORT);
+				sport_main = *(uint32_t*)nla_data(nla_tmp);
 
 				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DADDR4);
-				daddr = *(uint32_t*)nla_data(nla_tmp);
+				daddr_main = *(uint32_t*)nla_data(nla_tmp);
 
-				/**
-				 * request the MPTCP_CMD_ANNOUNCE to netlink api
-				 */
-				saddr = inet_addr("192.168.1.10");
-				loc_id = 4;
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DPORT);
+				dport_main = *(uint16_t*)nla_data(nla_tmp);
 
-				send_msg = nlmsg_alloc();
-				if(!send_msg){
-					perror("nlmsg_alloc() ");
-					return;
-				}
+#if EVENT_ERROR_DEBUG
+				ptr = (unsigned char*)&saddr_main;
+				printf("[%s] main connection : %u.%u.%u.%u.%d ~ ", __FUNCTION__, 
+						*(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3), sport_main);
+				ptr = (unsigned char*)&daddr_main;
+				printf("%u.%u.%u.%u.%d\n", 
+						*(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3), dport_main);
+				printf("[%s] token : %X\n", __FUNCTION__, token);
+#endif
 
-				if(!genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
-							NLM_F_REQUEST, MPTCP_CMD_ANNOUNCE, MPTCP_GENL_VER)){
-					perror("genlmsg_put() ");
-					return;
-				}
+				created = true;
+				break;
 
-				check += nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
-				check += nla_put(send_msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
-				check += nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
-				check += nla_put(send_msg, MPTCP_ATTR_SADDR4, sizeof(saddr), &saddr);
-
-				if(check < 0){
-					perror("nla_put() ");
-					return;
-				}
-				check = 0;
-
-				ret = nl_send_auto(cmd_send_sock, send_msg);
-				if(ret < 0){
-					perror("nl_send_auto() ");
-					return;
-				}
-				nlmsg_free(send_msg);
-
+			case MPTCP_EVENT_ESTABLISHED:
+				printf("MPTCP_EVENT_ESTABLISHED\n");
+				established = true;
 				break;
 
 			case MPTCP_EVENT_CLOSED:
 				printf("MPTCP_EVENT_CLOSED\n");
+				closed = true;
+				return;
 				break;
 
 			case MPTCP_EVENT_ANNOUNCED:
@@ -360,16 +353,79 @@ void subflow_policy_thread(void *arg)
 				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_REM_ID);
 				rem_id = *(uint8_t*)nla_data(nla_tmp);
 
-				printf("rem_id : %d\n", rem_id);
+#if EVENT_ERROR_DEBUG
+				ptr = (unsigned char*)&daddr_main;
+				printf("[%s] add-addr : %d(%u.%u.%u.%u)\n", __FUNCTION__,
+						rem_id, *(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3));
+#endif
+				announced = true;
+				break;
 
+			case MPTCP_EVENT_SUB_ESTABLISHED:
+				printf("MPTCP_EVENT_SUB_ESTABLISHED\n");
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_SADDR4);
+				saddr_sub = *(uint32_t*)nla_data(nla_tmp);
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_SPORT);
+				sport_sub = *(uint16_t*)nla_data(nla_tmp);
+
+#if EVENT_ERROR_DEBUG
+				ptr = (unsigned char*)&saddr_sub;
+				printf("[%s] sub connection : %u.%u.%u.%u.%d ~ ", __FUNCTION__,
+						*(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3), sport_sub);
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DADDR4);
+				ptr = (unsigned char*)nla_data(nla_tmp);
+				printf("%u.%u.%u.%u.%d\n", 
+						*(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3), dport_main);
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_BACKUP);
+				printf("[%s] priority : %s\n", __FUNCTION__, 
+						(*(uint8_t*)nla_data(nla_tmp) ? "backup" : "primary") ); 
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_IF_IDX);
+				printf("[%s] if_idx : %08X\n", __FUNCTION__, *(uint32_t*)nla_data(nla_tmp));
+#endif
+				sub_established = true;
 				break;
 
 			case MPTCP_EVENT_SUB_CLOSED:
 				printf("MPTCP_EVENT_SUB_CLOSED\n");
+#if EVENT_ERROR_DEBUG
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_SADDR4);
+				ptr = (unsigned char*)nla_data(nla_tmp);
+				printf("[%s] connection : %u.%u.%u.%u", __FUNCTION__
+						, *(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3));
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_SPORT);
+				printf(".%d ~ ", *(uint16_t*)nla_data(nla_tmp));
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DADDR4);
+				ptr = (unsigned char*)nla_data(nla_tmp);
+				printf("%u.%u.%u.%u.", *(ptr+0), *(ptr+1), *(ptr+2), *(ptr+3));
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_DPORT);
+				printf("%d\n", *(uint16_t*)nla_data(nla_tmp));
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_BACKUP);
+				printf("[%s] priority : %s\n", __FUNCTION__, 
+						(*(uint8_t*)nla_data(nla_tmp) ? "backup" : "primary"));
+
+				nla_tmp = nla_find(nla, nla_totlen, MPTCP_ATTR_IF_IDX);
+				printf("[%s] if_idx : %08X\n", __FUNCTION__, *(uint32_t*)nla_data(nla_tmp));
+#endif
 				break;
 
 			default:
-				printf("??\n");
+				printf("UNKNOWN\n");
+#if EVENT_ERROR_DEBUG
+				ptr = (char*)nlh;
+				for(int i=0; i<nlmsg_len; i++){
+					printf("%02X ", *(ptr+i));
+				}
+				printf("\n\n");
+#endif
 		}
 	}
 }
@@ -378,13 +434,253 @@ void subflow_policy_thread(void *arg)
 
 
 
-int get_fsize(FILE* file)
+void cmd_tx_thread(void* arg)
 {
-	int fsize;
+	/**
+	 * Send CMD to Netlink API
+	 * Start
+	 */ 
+	struct 	nl_sock*	cmd_send_sock 	= NULL;
+	struct 	nl_msg*		send_msg	= NULL;
+	int 	family_id;
+	int		ret;
+	
+	cmd_send_sock = nl_socket_alloc();
+	if(!cmd_send_sock){
+		perror("[cmd_tx_thread] cmd_send_sock = nl_socket_alloc() ");
+		return;
+	}
+	
+	if(genl_connect(cmd_send_sock)){
+		perror("[cmd_tx_thread] genl_connect(cmd_send_sock) ");
+		return;
+	}
+	
+	family_id = genl_ctrl_resolve(cmd_send_sock, MPTCP_GENL_NAME);
+	if(family_id < 0){
+		perror("[cmd_tx_thread] genl_ctrl_resolve() ");
+		return;
+	}
 
-	fseek(file, 0, SEEK_END);
-	fsize=ftell(file);
-	fseek(file, 0, SEEK_SET);	
+#if CMD_ERROR_DEBUG
+	char err_buff[256];
+	char* ptr;
+	struct nlmsghdr* nlm;
+	struct nlmsgerr* nlerr;
+#endif
+	bool announce_cmd = false;
+	bool sub_create_cmd = false;
+	while(1){
+		if(created && !announce_cmd){
+			printf("[%s] CMD_ANNOUNCE\n", __FUNCTION__);
+			saddr_sub = inet_addr("192.168.1.20");
+			loc_id = 4;
 
-	return fsize;
+			send_msg = nlmsg_alloc();
+
+			genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
+					NLM_F_REQUEST, MPTCP_CMD_ANNOUNCE, MPTCP_GENL_VER);
+
+			nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+			nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+			nla_put(send_msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
+			nla_put(send_msg, MPTCP_ATTR_SADDR4, sizeof(saddr_sub), &saddr_sub);
+
+			nl_send_auto(cmd_send_sock, send_msg);
+
+#if CMD_ERROR_DEBUG
+			memset(err_buff, 0, sizeof(err_buff));
+			ret = recv(nl_socket_get_fd(cmd_send_sock), err_buff, sizeof(err_buff), 0);
+			if(ret > 0){
+				ptr = (char*)&err_buff[0];
+				nlm = (struct nlmsghdr*)&err_buff[0];
+				nlerr = (struct nlmsgerr*)NLMSG_DATA(nlm);
+
+				if(nlerr->error != 0){
+					printf("[%s] CMD_ANNOUNCE error : %d\n", __FUNCTION__,nlerr->error);
+					for(int i=0; i<nlm->nlmsg_len; i++){
+						printf("%02X ", *(ptr+i));
+					}
+					printf("\n");
+					return;
+				}
+				else {
+					printf("[%s] CMD_ANNOUNCE success\n", __FUNCTION__);
+				}
+			}
+#endif
+			nlmsg_free(send_msg);
+			announce_cmd = true;
+		}
+
+		if(announce_cmd && announced && established && !sub_create_cmd){
+			printf("[cmd_tx_thread] CMD_SUB_CREATE\n");
+			
+			send_msg = nlmsg_alloc();
+
+			genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
+					NLM_F_REQUEST, MPTCP_CMD_SUB_CREATE, MPTCP_GENL_VER);
+
+			backup = 1;
+			if_idx = 7;
+
+			nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+			nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+			nla_put(send_msg, MPTCP_ATTR_LOC_ID, sizeof(loc_id), &loc_id);
+			nla_put(send_msg, MPTCP_ATTR_REM_ID, sizeof(rem_id), &rem_id);
+			nla_put(send_msg, MPTCP_ATTR_DADDR4, sizeof(daddr_main), &daddr_main);
+			nla_put(send_msg, MPTCP_ATTR_DPORT, sizeof(dport_main), &dport_main);
+			//nla_put(send_msg, MPTCP_ATTR_BACKUP, sizeof(backup), &backup);
+			//nla_put(send_msg, MPTCP_ATTR_IF_IDX, sizeof(if_idx), &if_idx);
+
+			nlm = (struct nlmsghdr*)nlmsg_hdr(send_msg);
+			ptr = (char*)nlm;
+			for(int i=0; i<nlm->nlmsg_len; i++){
+				printf("%02X ", *(ptr+i));
+			}
+			printf("\n");
+
+			nl_send_auto(cmd_send_sock, send_msg);
+
+#if CMD_ERROR_DEBUG
+			memset(err_buff, 0, sizeof(err_buff));
+			ret = recv(nl_socket_get_fd(cmd_send_sock), err_buff, sizeof(err_buff), 0);
+			if(ret > 0){
+				ptr = (char*)&err_buff[0];
+				nlm = (struct nlmsghdr*)&err_buff[0];
+				nlerr = (struct nlmsgerr*)NLMSG_DATA(nlm);
+
+				if(nlerr->error != 0){
+					printf("[%s] CMD_SUB_CREATE error : %d\n", __FUNCTION__, nlerr->error);
+					for(int i=0; i<nlm->nlmsg_len; i++){
+						printf("%02X ", *(ptr+i));
+					}
+					printf("\n");
+					return;
+				}
+				else{
+					printf("[%s] CMD_SUB_CREATE success\n", __FUNCTION__);
+				}
+			}
+#endif
+			nlmsg_free(send_msg);
+			sub_create_cmd = true;
+
+			break;
+		}
+
+/*
+		if(sub_established && sub_create_cmd){
+			printf("[%s] CMD_SUB_PRIORITY\n", __FUNCTION__);
+
+			// main changing priority
+
+			dport_main = htons(dport_main);
+
+			send_msg = nlmsg_alloc();
+
+			genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
+					NLM_F_REQUEST, MPTCP_CMD_SUB_PRIORITY, MPTCP_GENL_VER);
+			
+			backup = 1;
+
+			nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+			nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+			nla_put(send_msg, MPTCP_ATTR_SADDR4, sizeof(saddr_main), &saddr_main);
+			nla_put(send_msg, MPTCP_ATTR_SPORT, sizeof(sport_main), &sport_main);
+			nla_put(send_msg, MPTCP_ATTR_DADDR4, sizeof(daddr_main), &daddr_main);
+			nla_put(send_msg, MPTCP_ATTR_DPORT, sizeof(dport_main), &dport_main);
+			nla_put(send_msg, MPTCP_ATTR_BACKUP, sizeof(backup), &backup);
+
+			nl_send_auto(cmd_send_sock, send_msg);
+
+#if CMD_ERROR_DEBUG
+			nlm = (struct nlmsghdr*)nlmsg_hdr(send_msg);
+			ptr = (char*)nlm;
+			for(int i=0; i<nlm->nlmsg_len; i++){
+				printf("%02X ", *(ptr+i));
+			}
+			printf("\n");
+#endif
+
+#if CMD_ERROR_DEBUG
+			memset(err_buff, 0, sizeof(err_buff));
+			ret = recv(nl_socket_get_fd(cmd_send_sock), err_buff, sizeof(err_buff), 0);
+			if(ret > 0){
+				ptr = (char*)&err_buff[0];
+				nlm = (struct nlmsghdr*)&err_buff[0];
+				nlerr = (struct nlmsgerr*)NLMSG_DATA(nlm);
+
+				if(nlerr->error != 0){
+					printf("[%s] CMD_SUB_PRIORITY error : %d\n", __FUNCTION__, nlerr->error);
+					for(int i=0; i<nlm->nlmsg_len; i++){
+						printf("%02X ", *(ptr+i));
+					}
+					printf("\n");
+					return;
+				}
+				else{
+					printf("[%s] CMD_SUB_PRIORITY success\n", __FUNCTION__);
+				}
+			}
+#endif
+
+			// sub changing priority 
+
+			send_msg = nlmsg_alloc();
+
+			genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
+					NLM_F_REQUEST, MPTCP_CMD_SUB_PRIORITY, MPTCP_GENL_VER);
+			
+			backup = 0;
+
+			nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
+			nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
+			nla_put(send_msg, MPTCP_ATTR_SADDR4, sizeof(saddr_main), &saddr_sub);
+			nla_put(send_msg, MPTCP_ATTR_SPORT, sizeof(sport_main), &sport_sub);
+			nla_put(send_msg, MPTCP_ATTR_DADDR4, sizeof(daddr_main), &daddr_main);
+			nla_put(send_msg, MPTCP_ATTR_DPORT, sizeof(dport_main), &dport_main);
+			nla_put(send_msg, MPTCP_ATTR_BACKUP, sizeof(backup), &backup);
+
+			nl_send_auto(cmd_send_sock, send_msg);
+
+#if CMD_ERROR_DEBUG
+			nlm = (struct nlmsghdr*)nlmsg_hdr(send_msg);
+			ptr = (char*)nlm;
+			for(int i=0; i<nlm->nlmsg_len; i++){
+				printf("%02X ", *(ptr+i));
+			}
+			printf("\n");
+#endif
+
+#if CMD_ERROR_DEBUG
+			memset(err_buff, 0, sizeof(err_buff));
+			ret = recv(nl_socket_get_fd(cmd_send_sock), err_buff, sizeof(err_buff), 0);
+			if(ret > 0){
+				ptr = (char*)&err_buff[0];
+				nlm = (struct nlmsghdr*)&err_buff[0];
+				nlerr = (struct nlmsgerr*)NLMSG_DATA(nlm);
+
+				if(nlerr->error != 0){
+					printf("[%s] CMD_SUB_PRIORITY error : %d\n", __FUNCTION__, nlerr->error);
+					for(int i=0; i<nlm->nlmsg_len; i++){
+						printf("%02X ", *(ptr+i));
+					}
+					printf("\n");
+					return;
+				}
+				else{
+					printf("[%s] CMD_SUB_PRIORITY success\n", __FUNCTION__);
+				}
+			}
+#endif
+			nlmsg_free(send_msg);
+			break;
+		}
+*/
+	}
+	/**
+	 * Send CMD to Netlink API
+	 * End
+	 */
 }
