@@ -96,7 +96,8 @@ int main(int argc, char** argv)
 
 	int enable = 1;
 
-	char* scheduler = "roundrobin";
+	//char* scheduler = "roundrobin";
+	char* scheduler = "default";
 	char* manager = "netlink";
 
 
@@ -530,7 +531,7 @@ void cmd_tx_thread(void* arg)
 			nla_put(send_msg, MPTCP_ATTR_REM_ID, sizeof(rem_id), &rem_id);
 			nla_put(send_msg, MPTCP_ATTR_DADDR4, sizeof(daddr_main), &daddr_main);
 			nla_put(send_msg, MPTCP_ATTR_DPORT, sizeof(dport_main), &dport_main);
-			//nla_put(send_msg, MPTCP_ATTR_BACKUP, sizeof(backup), &backup);
+			nla_put(send_msg, MPTCP_ATTR_BACKUP, sizeof(backup), &backup);
 			//nla_put(send_msg, MPTCP_ATTR_IF_IDX, sizeof(if_idx), &if_idx);
 
 			nlm = (struct nlmsghdr*)nlmsg_hdr(send_msg);
@@ -565,13 +566,11 @@ void cmd_tx_thread(void* arg)
 #endif
 			nlmsg_free(send_msg);
 			sub_create_cmd = true;
-
-			break;
 		}
 
-/*
 		if(sub_established && sub_create_cmd){
 			printf("[%s] CMD_SUB_PRIORITY\n", __FUNCTION__);
+/*
 
 			// main changing priority
 
@@ -624,6 +623,7 @@ void cmd_tx_thread(void* arg)
 				}
 			}
 #endif
+*/
 
 			// sub changing priority 
 
@@ -632,7 +632,7 @@ void cmd_tx_thread(void* arg)
 			genlmsg_put(send_msg, getpid(), NL_AUTO_SEQ, family_id, 0,
 					NLM_F_REQUEST, MPTCP_CMD_SUB_PRIORITY, MPTCP_GENL_VER);
 			
-			backup = 0;
+			backup = 1;
 
 			nla_put(send_msg, MPTCP_ATTR_TOKEN, sizeof(token), &token);
 			nla_put(send_msg, MPTCP_ATTR_FAMILY, sizeof(family), &family);
@@ -677,7 +677,6 @@ void cmd_tx_thread(void* arg)
 			nlmsg_free(send_msg);
 			break;
 		}
-*/
 	}
 	/**
 	 * Send CMD to Netlink API
