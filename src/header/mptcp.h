@@ -1,11 +1,3 @@
-/**
- * MPTCP Option Header File
- *
- * @date	: 2021-05-25(Thu)
- * @author	: Ji-Hun(INSALB)
- */
-
-
 #ifndef _UAPI_LINUX_TCP_H
 #define _UAPI_LINUX_TCP_H
 
