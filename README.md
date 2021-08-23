@@ -34,6 +34,6 @@ And I used `ifstat` for NIC statistics.
 
 <br>
 
-## Precautions for Testing
+## Cautions for Testing
 It does not work as an MPTCP stack when proceeding to the loopback address("localhost", "127.0.0.1"). <br>
 Make sure you send it to physical address.
